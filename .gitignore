@@ -1,0 +1,19 @@
+# REAPER project and render artifacts
+*.rpp-bak
+*.wav
+*.flac
+*.mp3
+*.ogg
+*.aif
+*.aiff
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak
