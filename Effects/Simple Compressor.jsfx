@@ -1,0 +1,136 @@
+desc:Simple Compressor
+// A simple stereo-linked compressor for REAPER JSFX.
+// Includes soft knee, parallel mix, and gain-reduction metering.
+// Version: 1.0.0
+// License: MIT
+
+slider1:0<-24,24,0.1>Input (dB)
+slider2:-18<-60,0,0.1>Threshold (dB)
+slider3:4<1,20,0.1>Ratio
+slider4:10<0.1,100,0.1>Attack (ms)
+slider5:120<10,1000,1>Release (ms)
+slider6:6<0,24,0.1>Knee (dB)
+slider7:3<-12,24,0.1>Makeup (dB)
+slider8:100<0,100,1>Mix
+slider9:0<-24,24,0.1>Output (dB)
+
+@init
+detector_env = 0;
+gain_db = 0;
+meter_gr = 0;
+
+function db_to_gain(db) (
+  10 ^ (db / 20);
+);
+
+function gain_to_db(gain) (
+  20 * log(max(gain, 0.000000000001)) / log(10);
+);
+
+function compression_gain_db(level_db, threshold, ratio, knee) local(over, half_knee, knee_pos) (
+  over = level_db - threshold;
+  knee <= 0 ? (
+    over > 0 ? over * (1 / ratio - 1) : 0;
+  ) : (
+    half_knee = knee * 0.5;
+    over <= -half_knee ? 0 :
+    over >= half_knee ? over * (1 / ratio - 1) :
+    (
+      knee_pos = over + half_knee;
+      (1 / ratio - 1) * knee_pos * knee_pos / (2 * knee);
+    );
+  );
+);
+
+@slider
+input_gain = db_to_gain(slider1);
+threshold_db = slider2;
+ratio = max(1, slider3);
+attack_ms = max(0.1, slider4);
+release_ms = max(10, slider5);
+knee_db = slider6;
+makeup_gain = db_to_gain(slider7);
+mix = slider8 / 100;
+output_gain = db_to_gain(slider9);
+
+attack_coeff = exp(-1 / (attack_ms * 0.001 * srate));
+release_coeff = exp(-1 / (release_ms * 0.001 * srate));
+
+@sample
+in_l = spl0;
+in_r = spl1;
+pre_l = in_l * input_gain;
+pre_r = in_r * input_gain;
+
+detector = max(abs(pre_l), abs(pre_r));
+detector_env = detector > detector_env ? attack_coeff * detector_env + (1 - attack_coeff) * detector : release_coeff * detector_env + (1 - release_coeff) * detector;
+
+level_db = gain_to_db(detector_env);
+target_gain_db = compression_gain_db(level_db, threshold_db, ratio, knee_db);
+gain_db = target_gain_db;
+gain = db_to_gain(gain_db);
+
+compressed_l = pre_l * gain * makeup_gain;
+compressed_r = pre_r * gain * makeup_gain;
+
+mixed_l = pre_l * (1 - mix) + compressed_l * mix;
+mixed_r = pre_r * (1 - mix) + compressed_r * mix;
+
+spl0 = mixed_l * output_gain;
+spl1 = mixed_r * output_gain;
+
+meter_target = -gain_db;
+meter_gr = meter_target > meter_gr ? meter_gr * 0.70 + meter_target * 0.30 : meter_gr * 0.94 + meter_target * 0.06;
+
+@gfx 560 210
+margin = 24;
+meter_x = margin;
+meter_y = 78;
+meter_w = gfx_w - margin * 2;
+meter_h = 26;
+max_gr = 24;
+meter_fill = min(max_gr, max(0, meter_gr)) / max_gr * meter_w;
+
+gfx_set(0.07, 0.08, 0.09, 1);
+gfx_rect(0, 0, gfx_w, gfx_h);
+
+gfx_set(0.86, 0.88, 0.90, 1);
+gfx_x = margin;
+gfx_y = 16;
+gfx_drawstr("Simple Compressor");
+
+gfx_set(0.58, 0.62, 0.66, 1);
+gfx_x = margin;
+gfx_y = 45;
+gfx_drawstr("Gain reduction");
+
+gfx_set(0.14, 0.15, 0.16, 1);
+gfx_rect(meter_x, meter_y, meter_w, meter_h);
+
+gfx_set(0.95, 0.35, 0.22, 1);
+gfx_rect(meter_x, meter_y, meter_fill, meter_h);
+
+gfx_set(0.32, 0.34, 0.36, 1);
+tick = 0;
+loop(7,
+  tick_x = meter_x + tick / 24 * meter_w;
+  gfx_line(tick_x, meter_y - 5, tick_x, meter_y + meter_h + 5);
+  tick += 4;
+);
+
+gfx_set(0.82, 0.85, 0.88, 1);
+gfx_x = margin;
+gfx_y = 122;
+gfx_drawnumber(meter_gr, 1);
+gfx_drawstr(" dB");
+
+gfx_set(0.58, 0.62, 0.66, 1);
+gfx_x = margin;
+gfx_y = 154;
+gfx_drawstr("Threshold ");
+gfx_drawnumber(threshold_db, 1);
+gfx_drawstr(" dB   Ratio ");
+gfx_drawnumber(ratio, 1);
+gfx_drawstr(":1   Mix ");
+gfx_drawnumber(slider8, 0);
+gfx_drawstr("%");
